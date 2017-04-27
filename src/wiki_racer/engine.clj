@@ -1,19 +1,18 @@
 (ns wiki-racer.engine
-  (:require [clojure.core.async :refer [<! >! go go-loop chan <!! >!! alts! chan]]
+  (:require [clojure.core.async :refer [<! >! go go-loop chan <!! >!! alts! chan close!]]
             [wiki-racer.state :as state]
             [wiki-racer.scraper :as scraper]))
 
 (defn worker
-  [response-channel end-link]
-  (let [channel (chan 1024)]
+  [worker-index]
+  (let [channel (chan 2)]
     (go-loop []
-      (let [[level wiki] (<! channel)
+      (let [[level wiki] (<!! channel)
             page (scraper/scrape-page wiki)]
-        (println "received work" level wiki)
-        (state/update-visited! wiki)
-        (state/update-tracker! page wiki)
-        (when-not (state/found-destination? end-link)
-          (go (>!! response-channel [page level]))
+        (when (some? level)
+          (state/update-visited! wiki)
+          (state/update-tracker! page wiki)
+          (state/update-worker-queue! page level)
           (recur))))
     channel))
 
@@ -24,28 +23,29 @@
 (defn distribute-work
   [level unvisited-urls workers]
   (let [packets (create-work-packets level unvisited-urls)]
-    (go (doall (map-indexed (fn [i packet]
-                              (>!! (nth workers (mod i (count workers))) packet))
-                            packets)))))
+    (doall (map-indexed (fn [i packet]
+                          (>!! (nth workers (mod i (count workers))) packet))
+                        packets))))
 
 
 (defn dispatcher
-  [workers new-work-channel initial-link end-link]
-  (state/update-worker-queue! {:header "Start page" :links [{:href initial-link}]} -1)
-  (state/update-tracker! {:header "Start page" :links [{:href initial-link}]} initial-link)
+  [workers initial-link end-link]
+
   (go-loop
-    [_ ""]
-    (let [[level unvisited-urls] (state/get-work!)]
+    []
+    (let [[level unvisited-urls] (state/get-work! (count workers))]
       (cond
         (state/found-destination? end-link) (println (state/display-path initial-link end-link))
-        (empty? unvisited-urls) (->> (<! new-work-channel)
-                                      (apply state/update-worker-queue!)
-                                      recur)
         :else (do (distribute-work level unvisited-urls workers)
-                  (recur ""))))))
+                  (recur))))))
 
+(def initial-link  "/wiki/Mike_Tyson")
+(def end-link  "/wiki/Greek_language")
+ #_(state/update-worker-queue! {:header "Start page" :links [{:href initial-link}]} -1)
+ #_(state/update-tracker! {:header "Start page" :links [{:href initial-link}]} initial-link)
 
-#_(def work-channel (chan 8192))
-#_(def workers (mapv (fn [_] (worker work-channel "Segment")) (range 0 20)))
-#_(dispatcher workers work-channel "/wiki/Mike_Tyson" "/wiki/Fruit_anatomy")
+  #_(def workers (mapv (fn [i] (worker i)) (range 0 5)))
+  #_(dispatcher workers initial-link end-link)
+  #_(close! work-channel)
+  #_(doall (map #(close! %) workers))
 

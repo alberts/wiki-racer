@@ -73,5 +73,5 @@
 
 #_(def work-channel (async/chan (* 6 65535)))
 #_(def workers (map (fn [_] (async-worker work-channel "Segment")) [0 0 0 0 0 0 0]))
-#_(coordinator workers work-channel "/wiki/Mike_Tyson" "Mike Tyson" "Alexander the Great")
+#_(coordinator workers work-channel "/wiki/Mike_Tyson" "Mike Tyson" "Segment")
 

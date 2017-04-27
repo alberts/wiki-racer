@@ -4,7 +4,7 @@
 
 (def application-state (atom {:visited-pages #{}
                               :tracked-links {}
-                              :worker-queue (ref {})}))
+                              :worker-queue  (ref {})}))
 
 (def worker-queue (ref {}))
 
@@ -20,38 +20,50 @@
 (declare unvisited-urls)
 (defn- update-worker-queue*
   [queue depth urls]
-  (println queue)
   (dosync
     (alter queue update depth concat urls)
+    #_(println "added " (count urls))
     (:worker-queue @application-state)))
 
 (defn update-worker-queue!
   [page current-depth]
-  (println "updating worker queue" page)
+  (when page
+    #_(println "updating worker que with " (count (:links page)))
+    #_(dosync
+      (let [new-urls (unvisited-urls page)]
+        (alter worker-queue update (inc current-depth) concat new-urls))))
   (swap! application-state update :worker-queue update-worker-queue* (inc current-depth) (unvisited-urls page))
 
   #_(swap! application-state update :worker-queue update (inc current-depth) concat (unvisited-urls page)))
 
 (defn- update-on-work-requested
   [queue level links]
-  (dosync
-    (let [diff (set/difference (into #{} links) (into #{} (get @queue level)))]
-      (if (empty? diff)
-        (alter queue dissoc level)
-        (alter queue assoc level diff))
-      (swap! application-state assoc :worker-queue queue))))
+  (let [diff (set/difference (into #{} (get @queue level)) (into #{} links))]
+    (if (empty? diff)
+      (alter queue dissoc level)
+      (alter queue assoc level diff))
+    queue))
 
+
+#_(defn get-work!
+  []
+  (dosync
+    (let [[level links] (when (not-empty @worker-queue) (apply min-key (fn [[k _]] k) @worker-queue))
+          diff (set/difference (into #{} links) (into #{} (get @worker-queue level)))]
+      (if (empty? diff)
+        (alter worker-queue dissoc level)
+        (alter worker-queue assoc level diff))
+      [level (into #{} links)])))
 
 (defn get-work!
-  []
-  (if (empty? (:worker-queue @application-state))
-    []
-    (let [[level links] (apply min-key (fn [[k _]] k) (:worker-queue @application-state))
-          ]
-      (swap! application-state update :worker-queue assoc level (set/difference (into #{} links) (into #{} (get-in @application-state [:worker-queue level]))))
-      (swap! application-state update :worker-queue update-on-work-requested level links)
-      (println "found work " (count links))
-      [level links])))
+    [batch-size]
+    (if (empty? @(:worker-queue @application-state))
+      []
+      (dosync
+        (let [[level links] (apply min-key (fn [[k _]] k) @(:worker-queue @application-state))]
+          (swap! application-state update :worker-queue update-on-work-requested level (take batch-size links))
+          (println (count links) (count @(:worker-queue @application-state)) level)
+          [level (take batch-size links)]))))
 
 
 (defn found-destination?
