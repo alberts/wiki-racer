@@ -1,77 +1,49 @@
 (ns wiki-racer.core
   (:require
-    [clojure.core.async :refer [<! >! go go-loop chan <!! >!! alts!] :as async]
-    [wiki-racer.scraper :as scraper]
-    [clojure.set :as set])
-
+    [wiki-racer.engine :as engine]
+    [clojure.set :as set]
+    [clojure.string :as str]
+    [clojure.tools.cli :as cli])
   (:gen-class))
 
-(def visited-pages (atom #{}))
-(def tracker (atom {}))
+(def cli-options
+  [["-n" "--workers WORKERS" "number of workers default 5" :default 5 :parse-fn #(Integer/parseInt %)]
+   ["-s" "--start START" "the start wiki header"]
+   ["-e" "--end END" "the end wiki header"]
+   ["-h" "--help"]])
 
-(defn update-visited!
-  [wiki-path]
-  (swap! visited-pages conj wiki-path))
+(defn usage [options-summary]
+  (->> ["This program finds a path between two wiki pages"
+        ""
+        "Usage: java -jar wiki-racer-0.1.0-SNAPSHOT-standalone.jar [options]"
+        ""
+        "Options:"
+        options-summary]
+       (str/join \newline)))
 
-(defn update-tracker!
-  [{:keys [header links]}]
-  (doall
-    (map #(swap! tracker assoc (:title %) header) links)))
+(defn error-msg [errors]
+  (str "The following errors occurred while parsing your command:\n\n"
+       (str/join \newline errors)))
 
-(defn new-urls
-  [visited-pages {:keys [links]}]
-  (set/difference (into #{} (map :href links)) visited-pages))
+(defn validate-args
+  [args]
+  (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
+    (cond
+      (:help options) {:exit-message (usage summary) :ok? true}
+      errors {:exit-message (error-msg errors)}
+      (or (empty (:start options)) (empty (:end options))) {:exit-message (error-msg "start and end must be specified") :ok? false}
+      :else {:options options :ok? true})))
 
-(defn found-destination?
-  [tracker final-page-title]
-  (contains? tracker final-page-title))
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
 
-(defn async-worker
-  [response-channel final-page-title]
-  (let [channel (async/chan 130890)]
-    (go-loop []
-      (let [wiki (<! channel)
-            page (scraper/scrape-page wiki)]
-        (update-visited! wiki)
-        (update-tracker! page)
-        (when-not (found-destination? @tracker final-page-title)
-          (go (doall (map #(>!! response-channel %) (new-urls @visited-pages page))))
-          (recur))))
-    channel))
-
-(defn display-path
-  [tracker start-title end-title]
-  (println (loop [acc []
-                  current-end end-title]
-             (if (= current-end start-title)
-               (reverse (conj acc current-end))
-               (recur (conj acc current-end) (get tracker current-end))))))
-
-
-(defn coordinator
-  [workers work-channel initial-link start-title end-title]
-  (>!! work-channel initial-link)
-  (go-loop
-    [current-worker-index 0]
-    (let [next-url (<! work-channel)
-          worker (nth workers (mod current-worker-index (count workers)))]
-      (if (found-destination? @tracker end-title)
-        (display-path @tracker start-title end-title)
-        (do
-          (go (>!! worker next-url))
-          (recur (inc current-worker-index)))))))
-
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (let [work-channel (async/chan (* 50 65535))
-        workers (map (fn [_] (async-worker work-channel "Segment")) (range 0 50))]
-    (coordinator workers work-channel "/wiki/Mike_Tyson" "Mike Tyson" "Segment"))
-  (while true (Thread/sleep 100000))
-
-  (println "Hello, World!"))
-
-#_(def work-channel (async/chan (* 6 65535)))
-#_(def workers (map (fn [_] (async-worker work-channel "Segment")) [0 0 0 0 0 0 0]))
-#_(coordinator workers work-channel "/wiki/Mike_Tyson" "Mike Tyson" "Segment")
+(defn -main [& args]
+  (let [{:keys [action options exit-message ok?]} (validate-args args)]
+    (if exit-message
+      (exit (if ok? 0 1) exit-message)
+      (println (engine/run-engine
+                 (:start options)
+                 (:end options)
+                 (:workers options))))))
 

@@ -1,3 +1,6 @@
+;; Keeps the state for the App, which includes the list of pages already visited, the tracked links which is a map that
+;; contains the destination wiki link as the key and the source as the value and a set of pages that have not been visited
+
 (ns wiki-racer.state
   (:require [clojure.set :as set]))
 
@@ -55,9 +58,10 @@
 
 (defn display-path
   [start-link end-link]
-  (let [tracker (:tracked-links @application-state)]
-    (loop [acc []
-           current-end end-link]
-      (if (= current-end start-link)
-        (conj acc current-end)
-        (recur (conj acc current-end) (get tracker current-end))))))
+  (when (found-destination? end-link)
+    (let [tracker (:tracked-links @application-state)]
+      (loop [acc []
+             current-end end-link]
+        (if (= current-end start-link)
+          (conj acc current-end)
+          (recur (conj acc current-end) (get tracker current-end)))))))
