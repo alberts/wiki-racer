@@ -8,19 +8,16 @@
   [worker-index]
   "The worker is a channel that listens to incoming requests for scraping wiki pages for links
   Once a page is scraped the worker updates the state of the application(new links found, pages-tracked)"
-  (let [channel (chan 32)]
-    (go-loop []
-      (let [[level wiki] (<!! channel)
-            page (scraper/scrape-page wiki)]
-        (println wiki)
-        (when (some? level)
-          (state/update-visited! wiki)
-          (state/update-tracker! page wiki)
-          (state/update-worker-queue! page level)
-          #_(println "finished work")
-          (recur))))
-
-    (println "workerend")
+  (let [channel (chan)]
+    (thread
+      (loop []
+        (let [[level wiki] (<!! channel)
+              page (scraper/scrape-page wiki)]
+          (when (some? level)
+            (state/update-visited! wiki)
+            (state/update-tracker! page wiki)
+            (state/update-worker-queue! page level)
+            (recur)))))
     channel))
 
 (defn create-work-packets
@@ -31,13 +28,9 @@
 (defn distribute-work
   [level unvisited-urls workers]
   "Distribute work in a round robin fashion amongst the workers"
-#_  (println "distirbuting work")
   (let [packets (create-work-packets level unvisited-urls)]
-    (println packets)
     (doall (map-indexed (fn [i packet]
-                          (println "sending" i packet)
-                          (>!! (nth workers (mod i (count workers))) packet)
-                          (println "sent"))
+                          (>!! (nth workers (mod i (count workers))) packet))
                         packets))))
 
 (defn dispatcher
@@ -48,11 +41,12 @@
   (thread
     (while (not (state/found-destination? end-link))
       (let [[level unvisited-urls] (state/get-work! (count workers))]
-        (when (nil? level) (Thread/sleep 2000))
+        (when (nil? level) (Thread/sleep 2000))             ;;undesirable but its a hack now
         (if (state/found-destination? end-link)
           (do
+            (println "++++++++++++++ so done")
             (doall (map #(close! %) workers))
-            (>!! terminator (state/display-path initial-link end-link)))
+            (>!! terminator (state/source->dest initial-link end-link)))
           (distribute-work level unvisited-urls workers))))))
 
 (defn run-engine
@@ -62,7 +56,7 @@
   (let [initial-link (str "/wiki/" (str/join "_" (str/split start-header #" ")))
         end-link (str "/wiki/" (str/join "_" (str/split end-header #" ")))
         terminator (chan)
-        workers (mapv (fn [i] (worker i)) (range 0 7))]
+        workers (mapv (fn [i] (worker i)) (range 0 num-workers))]
     (state/update-worker-queue! {:header start-header :links [{:href initial-link}]} -1)
     (state/update-tracker! {:header start-header :links [{:href initial-link}]} initial-link)
     (dispatcher workers terminator initial-link end-link)
@@ -70,7 +64,7 @@
 
 ;;Tests during dev
 #_ (def initial-link "/wiki/Mike_Tyson")
-#_(def end-link "/wiki/Fruit_anatomy")
+#_(def end-link "/wiki/Greco-Buddhism")
 #_ (def terminator (chan))
 #_(state/update-worker-queue! {:header "Start page" :links [{:href initial-link}]} -1)
 #_(state/update-tracker! {:header "Start page" :links [{:href initial-link}]} initial-link)
@@ -79,7 +73,7 @@
 #_(dispatcher workers terminator initial-link end-link)
 #_(close! work-channel)
 #_(doall (map #(close! %) workers))
-
+#_ (state/found-destination? end-link)
 
 
 

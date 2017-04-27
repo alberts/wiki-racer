@@ -29,6 +29,7 @@
   [args]
   (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
     (cond
+      (nil? args)    {:exit-message (usage summary) :ok? true}
       (:help options) {:exit-message (usage summary) :ok? true}
       errors {:exit-message (error-msg errors)}
       (or (empty (:start options)) (empty (:end options))) {:exit-message (error-msg "start and end must be specified") :ok? false}

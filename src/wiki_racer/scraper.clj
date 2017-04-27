@@ -38,7 +38,7 @@
        (map (fn [element] [(get-in element [:attrs :title]) (first (html/attr-values element :href))]))
        (map #(zipmap [:title :href] %1))
        (filter #(.startsWith (:href %) "/wiki"))
-       (distinct-by :title)))
+       (distinct-by :href)))
 
 (defn- fetch-url
   [url]

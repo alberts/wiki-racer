@@ -56,12 +56,18 @@
   [{:keys [links]}]
   (set/difference (into #{} (map :href links)) (:visited-pages @application-state)))
 
-(defn display-path
+(defn source->dest
   [start-link end-link]
   (when (found-destination? end-link)
     (let [tracker (:tracked-links @application-state)]
       (loop [acc []
              current-end end-link]
         (if (= current-end start-link)
-          (conj acc current-end)
+          (reverse (conj acc current-end))
           (recur (conj acc current-end) (get tracker current-end)))))))
+ ;;for tests
+(defn reset-state
+  []
+  (reset! application-state {:visited-pages #{}
+                              :tracked-links {}
+                              :worker-queue  (ref {})}))
