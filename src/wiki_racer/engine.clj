@@ -13,6 +13,7 @@
           (state/update-visited! wiki)
           (state/update-tracker! page wiki)
           (state/update-worker-queue! page level)
+          #_(println "finished work")
           (recur))))
     channel))
 
@@ -22,10 +23,13 @@
 
 (defn distribute-work
   [level unvisited-urls workers]
+  #_(println "distirbuting work")
   (let [packets (create-work-packets level unvisited-urls)]
     (doall (map-indexed (fn [i packet]
                           (>!! (nth workers (mod i (count workers))) packet))
-                        packets))))
+                        packets))
+    #_(println "finished distirbuting work")
+    ))
 
 
 (defn dispatcher
@@ -40,11 +44,11 @@
                   (recur))))))
 
 (def initial-link  "/wiki/Mike_Tyson")
-(def end-link  "/wiki/Greek_language")
+(def end-link  "/wiki/Fruit_anatomy")
  #_(state/update-worker-queue! {:header "Start page" :links [{:href initial-link}]} -1)
  #_(state/update-tracker! {:header "Start page" :links [{:href initial-link}]} initial-link)
 
-  #_(def workers (mapv (fn [i] (worker i)) (range 0 5)))
+  #_(def workers (mapv (fn [i] (worker i)) (range 0 15)))
   #_(dispatcher workers initial-link end-link)
   #_(close! work-channel)
   #_(doall (map #(close! %) workers))
