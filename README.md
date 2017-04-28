@@ -38,14 +38,14 @@ java -jar target/uberjar/wiki-racer-0.1.0-SNAPSHOT-standalone.jar -s "Mike Tyson
 
 - The entire state of the app(tracked-links, visited urls, pending work) is kept in a thread safe data structure updated by the workers as it scans each page
 
+## Strategies tried
+Did a simple breadth first search(traverse all the links within a single page before going to the subsequent set of pages) no threads simple job queue to see if the functionality to scrape pages as well as traverse worked.
+But then doing it so i can distribute it to multiple threads/go blocks caused all sorts of trouble.
+Then I ran into this heap space problem when displaying
+
 ### Bugs
 When it has found a path the program prints a message "++++++++++so done" but while trying to actually spit it out
 it seems to run out of heap space on any thing that has a distance of more than 2
 
 So something like (Mike Tyson -> Greek Language) works but (Mike Tyson -> Fruit Anatomy) gets to the destination path but does not print a result
-
-##Strategies tried
-Did a simple breadth first search(traverse all the links within a single page before going to the subsequent set of pages) no threads simple job queue to see if the functionality to scrape pages as well as traverse worked.
-But then doing it so i can distribute it to multiple threads/go blocks caused all sorts of trouble.
-Then I ran into this heap space problem when displaying
 
