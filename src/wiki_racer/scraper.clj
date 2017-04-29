@@ -16,7 +16,7 @@
   "scrape a wiki page to get a map containing the the following
   :header -> the title of the page
   :links -> the links each of which contain the title(header) and the relative url within wikipedia"
-  (println wiki)
+  #_(println wiki)
   (let [page (fetch-wiki-page wiki)]
     {:header (get-title page)
      :links  (get-links page)}))

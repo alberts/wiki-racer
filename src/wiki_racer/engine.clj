@@ -1,8 +1,11 @@
 (ns wiki-racer.engine
-  (:require [clojure.core.async :refer [<! >! go go-loop chan <!! >!! alts! chan close! thread]]
+  (:require [chime :as chime]
+            [clj-time.core :as time]
+            [clj-time.periodic :as periodic]
+            [clojure.core.async :refer [<! >! go go-loop chan <!! >!! alts! chan close! thread]]
+            [clojure.string :as str]
             [wiki-racer.state :as state]
-            [wiki-racer.scraper :as scraper]
-            [clojure.string :as str]))
+            [wiki-racer.scraper :as scraper]))
 
 (defn worker
   [worker-index]
@@ -41,39 +44,42 @@
   (thread
     (while (not (state/found-destination? end-link))
       (let [[level unvisited-urls] (state/get-work! (count workers))]
-        (when (nil? level) (Thread/sleep 2000))             ;;undesirable but its a hack now
-        (if (state/found-destination? end-link)
-          (do
-            (println "++++++++++++++ so done")
-            (doall (map #(close! %) workers))
-            (>!! terminator (state/source->dest initial-link end-link)))
-          (distribute-work level unvisited-urls workers))))))
+        (when (nil? level) (println "Waiting for work") (Thread/sleep 1000)) ;;undesirable but its a hack now
+        (distribute-work level unvisited-urls workers)))
+    (when (state/found-destination? end-link)
+      #_(doall (map #(close! %) workers))                   ;;undesirable but it causes nils to to be printed
+      (>!! terminator (state/source->dest initial-link end-link)))))
 
 (defn run-engine
   [start-header end-header num-workers]
   "The engine runner that creates workers(channels) and a dispatcher and delegates to the dispatcher to
   find a path"
   (let [initial-link (str "/wiki/" (str/join "_" (str/split start-header #" ")))
-        end-link (str "/wiki/" (str/join "_" (str/split end-header #" ")))
-        terminator (chan)
-        workers (mapv (fn [i] (worker i)) (range 0 num-workers))]
+        end-link     (str "/wiki/" (str/join "_" (str/split end-header #" ")))
+        terminator   (chan)
+        workers      (mapv (fn [i] (worker i)) (range 0 num-workers))
+        chimes       (chime/chime-ch (periodic/periodic-seq (time/now) (time/millis 5000)))]
     (state/update-worker-queue! {:header start-header :links [{:href initial-link}]} -1)
     (state/update-tracker! {:header start-header :links [{:href initial-link}]} initial-link)
     (dispatcher workers terminator initial-link end-link)
-    (<!! terminator) ))
+    (go-loop []
+      (when-let [_ (<! chimes)]
+        (clojure.pprint/pprint (state/summary))
+        (recur)))
+    (<!! terminator)))
 
 ;;Tests during dev
-#_ (def initial-link "/wiki/Mike_Tyson")
-#_(def end-link "/wiki/Greco-Buddhism")
-#_ (def terminator (chan))
+#_(def initial-link "/wiki/Mike_Tyson")
+#_(def end-link "/wiki/Fruit_anatomy")
+#_(def terminator (chan))
 #_(state/update-worker-queue! {:header "Start page" :links [{:href initial-link}]} -1)
 #_(state/update-tracker! {:header "Start page" :links [{:href initial-link}]} initial-link)
 
-#_(def workers (mapv (fn [i] (worker i)) (range 0 20)))
+#_(def workers (mapv (fn [i] (worker i)) (range 0 100)))
 #_(dispatcher workers terminator initial-link end-link)
 #_(close! work-channel)
 #_(doall (map #(close! %) workers))
-#_ (state/found-destination? end-link)
+#_(state/found-destination? end-link)
 
 
 

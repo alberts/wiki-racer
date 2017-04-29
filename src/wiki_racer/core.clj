@@ -1,7 +1,6 @@
 (ns wiki-racer.core
   (:require
     [wiki-racer.engine :as engine]
-    [clojure.set :as set]
     [clojure.string :as str]
     [clojure.tools.cli :as cli])
   (:gen-class))
@@ -29,7 +28,7 @@
   [args]
   (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
     (cond
-      (nil? args)    {:exit-message (usage summary) :ok? true}
+      (nil? args) {:exit-message (usage summary) :ok? true}
       (:help options) {:exit-message (usage summary) :ok? true}
       errors {:exit-message (error-msg errors)}
       (or (empty (:start options)) (empty (:end options))) {:exit-message (error-msg "start and end must be specified") :ok? false}
@@ -39,12 +38,26 @@
   (println msg)
   (System/exit status))
 
+(defn format-path
+  [paths]
+  (->> (map #(str/replace % #"/wiki/" "") paths)
+       (map #(str/join " " (str/split % #"_")))
+       (partition 2 1)
+       (map #(str/join " -> " %))
+       (str/join "\n")))
+
 (defn -main [& args]
   (let [{:keys [action options exit-message ok?]} (validate-args args)]
     (if exit-message
       (exit (if ok? 0 1) exit-message)
-      (println (engine/run-engine
-                 (:start options)
-                 (:end options)
-                 (:workers options))))))
+      (time
+        (do
+
+          (println (str/join ""
+                             ["-----------------------------------------------------------\n"
+                              (format-path (engine/run-engine
+                                             (:start options)
+                                             (:end options)
+                                             (:workers options)))
+                              "\n---------------------------------------------------------"])))))))
 

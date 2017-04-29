@@ -27,7 +27,10 @@
       (reset-state)
       (update-worker-queue! {:header "title" :links[{:href "/wiki/path1"} {:href "/wiki/path2"}]} 0)
       (get-work! 1) => [1 ["/wiki/path1"]]
-      @(:worker-queue @application-state) => {1 #{"/wiki/path2"}})
+      @(:worker-queue @application-state) => {1 #{"/wiki/path2"}}
+      (get-work! 2) => [1 ["/wiki/path2"]]
+      @(:worker-queue @application-state) => {}
+      )
 
 (fact "state should provide a path between source and destination"
       (reset-state)
