@@ -42,13 +42,15 @@
 
 (defn- fetch-url
   [url]
-  (with-open [inputstream (-> (URL. url)
-                              .openConnection
-                              (doto (.setInstanceFollowRedirects true)
-                                    (.setConnectTimeout 15000)
-                                    (.setReadTimeout 15000))
-                              .getContent)]
-    (html/html-resource inputstream)))
+  (try
+    (with-open [inputstream (-> (URL. url)
+                                .openConnection
+                                (doto (.setInstanceFollowRedirects true)
+                                      (.setConnectTimeout 15000)
+                                      (.setReadTimeout 15000))
+                                .getContent)]
+      (html/html-resource inputstream))
+    (catch java.io.FileNotFoundException e (prn url " is not a valid page") [])))
 
 (defn- distinct-by
   [keyfn coll]
