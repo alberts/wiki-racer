@@ -28,11 +28,20 @@ lein uberjar
 -e The title to end at
 ```
 ## Examples
-
-java -jar target/uberjar/wiki-racer-0.1.0-SNAPSHOT-standalone.jar -s "Mike Tyson" -e "Fruit anatomy" -n 10
+```
+java -jar target/uberjar/wiki-racer-0.1.0-SNAPSHOT-standalone.jar -s "Kevin Bacon" -e "Quentin Tarantino"
+.
+.
+.
+-----------------------------------------------------------
+Kevin Bacon -> Daniel Day-Lewis
+Daniel Day-Lewis -> Quentin Tarantino
+---------------------------------------------------------
+"Elapsed time: 14194.813605 msecs"
+```
 
 ## General workflow
-- The engine has a dispatcher which reads from a job queue that contains unvisited wiki pages and distributes them to workers
+- The engine has a dispatcher which reads from a job queue that contains unvisited wiki pages and distributes them to workers. Each page is tracked with the depth. Work is dispatched from the lowest index(depth) first effectively making the wiki scan a BFS
 
 - Before sending out a batch of work the dispatcher checks if it has seen a destination link and displays the output by going from the destination link to the source link.
 
@@ -40,12 +49,13 @@ java -jar target/uberjar/wiki-racer-0.1.0-SNAPSHOT-standalone.jar -s "Mike Tyson
 
 ## Strategies tried
 Did a simple breadth first search(traverse all the links within a single page before going to the subsequent set of pages) no threads simple job queue to see if the functionality to scrape pages as well as traverse worked.
-But then doing it so i can distribute it to multiple threads/go blocks caused all sorts of trouble.
-Then I ran into this heap space problem when displaying
+However the BFS does result in a stack overflow when the number of links exceed a certain amount. To avoid this the app simply scans the pages in BFS order and tracks the source from which a page came from. This way it does not need to do a BFS when it finds the destination.
+The path from the destination to the source can be found by tracking dest -> source until the source is the start page.
+
+Since a pure BFS accumulates well over a 100K links just at the 3rd level(3 pages away from the start) that a heuristic will need to be applied as in its possible that we do a depth first search starting at a certain level but that is something I haven't tried.
 
 ### Bugs
-When it has found a path the program prints a message "++++++++++so done" but while trying to actually spit it out
-it seems to run out of heap space on any thing that has a distance of more than 2
+Currently there is no stopping the racer and it will either find you a path or run out of memory.
+As a feature it is easy to add a stopping condition that either times out or ends after looking at a certain number of links
 
-So something like (Mike Tyson -> Greek Language) works but (Mike Tyson -> Fruit Anatomy) gets to the destination path but does not print a result
-
+Also using the STM to manage a queue is problematic. An STM uses a tests and set method to update a data structure which means it occasionally appears that the racer is not making progress. To fix this I'd have to implement the queue that lines up work in Java and bridge between clojure and java to distribute work.
